@@ -26,7 +26,6 @@ $(BINARY): $(SWIFT_FILES) $(OBJC_FILES) $(BRIDGE_HEADER)
 	@mkdir -p $(BUILD_DIR)
 	# Compile ObjC
 	clang -c -fobjc-arc -target $(TARGET) \
-		-framework CoreGraphics \
 		Sources/VirtualDisplayBridge.m \
 		-o $(BUILD_DIR)/VirtualDisplayBridge.o
 	# Compile Swift + link

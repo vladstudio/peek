@@ -31,7 +31,7 @@ struct MenuView: View {
             Task { @MainActor in await appState.toggle() }
         }
         .keyboardShortcut("s")
-        .onAppear { appState.flashBorder() }
+        .onAppear { appState.showBorderIfActive() }
 
         Divider()
 
@@ -150,6 +150,7 @@ class AppState {
                 outputHeight: region.height
             )
             isCapturing = true
+            showBorder()
         } catch {
             print("Peek: Capture failed: \(error)")
             outputWindow.close()
@@ -161,15 +162,18 @@ class AppState {
         await capture.stopCapture()
         outputWindow.close()
         virtualDisplay.destroy()
+        regionBorder.close()
         isCapturing = false
     }
 
     func selectPreset(_ preset: RegionPreset) async {
         guard preset != selectedPreset else { return }
         selectedPreset = preset
-        flashBorder()
         if isCapturing {
             await applyConfiguration()
+            showBorder()
+        } else {
+            flashBorder()
         }
     }
 
@@ -229,13 +233,30 @@ class AppState {
 
     // MARK: - Helpers
 
+    func showBorderIfActive() {
+        if isCapturing {
+            showBorder()
+        } else {
+            flashBorder()
+        }
+    }
+
+    func showBorder() {
+        guard let (rect, screen) = borderRectAndScreen() else { return }
+        regionBorder.show(rect: rect, on: screen)
+    }
+
     func flashBorder() {
+        guard let (rect, screen) = borderRectAndScreen() else { return }
+        regionBorder.flash(rect: rect, on: screen)
+    }
+
+    private func borderRectAndScreen() -> (CGRect, NSScreen)? {
         guard let display = resolvedDisplay(),
-              let screen = nsScreen(for: display) else { return }
+              let screen = nsScreen(for: display) else { return nil }
         let sourceRect = selectedPreset.sourceRect(
             displayWidth: display.width, displayHeight: display.height
         )
-        // Convert sourceRect (top-left origin) to screen coords (bottom-left origin)
         let screenFrame = screen.frame
         let flipped = CGRect(
             x: screenFrame.origin.x + sourceRect.origin.x,
@@ -243,7 +264,7 @@ class AppState {
             width: sourceRect.width,
             height: sourceRect.height
         )
-        regionBorder.flash(rect: flipped, on: screen)
+        return (flipped, screen)
     }
 
     private func resolvedDisplay() -> SCDisplay? {

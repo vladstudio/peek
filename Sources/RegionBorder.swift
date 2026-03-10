@@ -3,47 +3,60 @@ import QuartzCore
 
 class RegionBorder {
     private var window: NSWindow?
-    private var fadeWorkItem: DispatchWorkItem?
+    private var shapeLayer: CAShapeLayer?
+    private var flashWorkItem: DispatchWorkItem?
 
+    /// Show persistent overlay: dims everything outside `rect`, border around the region.
+    func show(rect: CGRect, on screen: NSScreen) {
+        flashWorkItem?.cancel()
+        flashWorkItem = nil
+
+        let screenFrame = screen.frame
+        let needsNewWindow = window == nil
+            || window?.screen !== screen
+            || window?.frame != screenFrame
+
+        if needsNewWindow {
+            close()
+            let w = NSWindow(
+                contentRect: screenFrame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false,
+                screen: screen
+            )
+            w.backgroundColor = .clear
+            w.isOpaque = false
+            w.hasShadow = false
+            w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+            w.ignoresMouseEvents = true
+            w.isReleasedWhenClosed = false
+            w.collectionBehavior = [.canJoinAllSpaces, .stationary]
+            w.alphaValue = 1.0
+
+            let view = NSView(frame: NSRect(origin: .zero, size: screenFrame.size))
+            view.wantsLayer = true
+            view.layer?.backgroundColor = .clear
+
+            let layer = CAShapeLayer()
+            layer.fillRule = .evenOdd
+            view.layer?.addSublayer(layer)
+
+            w.contentView = view
+            w.orderFront(nil)
+
+            self.window = w
+            self.shapeLayer = layer
+        }
+
+        updatePath(rect: rect)
+    }
+
+    /// Flash: show briefly, then fade out.
     func flash(rect: CGRect, on screen: NSScreen) {
-        fadeWorkItem?.cancel()
-        close()
+        show(rect: rect, on: screen)
 
-        let w = NSWindow(
-            contentRect: rect,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false,
-            screen: screen
-        )
-        w.backgroundColor = .clear
-        w.isOpaque = false
-        w.hasShadow = false
-        w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
-        w.ignoresMouseEvents = true
-        w.isReleasedWhenClosed = false
-        w.alphaValue = 1.0
-
-        let view = NSView(frame: NSRect(origin: .zero, size: rect.size))
-        view.wantsLayer = true
-        view.layer?.backgroundColor = .clear
-
-        let border = CAShapeLayer()
-        let inset: CGFloat = 2
-        border.path = CGPath(
-            rect: CGRect(origin: .zero, size: rect.size).insetBy(dx: inset, dy: inset),
-            transform: nil
-        )
-        border.fillColor = NSColor.systemBlue.withAlphaComponent(0.2).cgColor
-        border.strokeColor = NSColor.systemBlue.cgColor
-        border.lineWidth = 4
-        view.layer?.addSublayer(border)
-
-        w.contentView = view
-        w.orderFront(nil)
-
-        self.window = w
-
+        flashWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, let w = self.window else { return }
             NSAnimationContext.runAnimationGroup({ ctx in
@@ -53,13 +66,62 @@ class RegionBorder {
                 self?.close()
             })
         }
-        fadeWorkItem = work
+        flashWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
+    /// Brief pulse: bump opacity up then back down (for when overlay is already visible).
+    func pulse() {
+        guard let layer = shapeLayer else { return }
+        let anim = CABasicAnimation(keyPath: "opacity")
+        anim.fromValue = 1.0
+        anim.toValue = 0.3
+        anim.duration = 0.15
+        anim.autoreverses = true
+        anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer.add(anim, forKey: "pulse")
+    }
+
     func close() {
+        flashWorkItem?.cancel()
+        flashWorkItem = nil
         window?.close()
         window = nil
-        fadeWorkItem = nil
+        shapeLayer = nil
+    }
+
+    private func updatePath(rect: CGRect) {
+        guard let window, let layer = shapeLayer else { return }
+
+        let bounds = window.contentView?.bounds ?? window.frame
+        // rect is in screen coordinates, convert to window-local (window origin = screen origin)
+        let localRect = CGRect(
+            x: rect.origin.x - window.frame.origin.x,
+            y: rect.origin.y - window.frame.origin.y,
+            width: rect.width,
+            height: rect.height
+        )
+
+        let path = CGMutablePath()
+        path.addRect(bounds)
+        path.addRect(localRect)
+
+        layer.path = path
+        layer.fillColor = NSColor.black.withAlphaComponent(0.3).cgColor
+        layer.strokeColor = nil
+
+        // Border around the cutout
+        let borderLayer: CAShapeLayer
+        if let existing = layer.sublayers?.first as? CAShapeLayer {
+            borderLayer = existing
+        } else {
+            borderLayer = CAShapeLayer()
+            borderLayer.fillColor = nil
+            layer.addSublayer(borderLayer)
+        }
+        let borderInset: CGFloat = -2  // outside the region
+        borderLayer.path = CGPath(rect: localRect.insetBy(dx: borderInset, dy: borderInset), transform: nil)
+        borderLayer.strokeColor = NSColor.systemBlue.cgColor
+        borderLayer.lineWidth = 4
     }
 }

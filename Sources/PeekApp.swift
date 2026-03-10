@@ -1,0 +1,250 @@
+import SwiftUI
+import ScreenCaptureKit
+
+@main
+struct PeekApp: App {
+    @State private var appState = AppState()
+
+    var body: some Scene {
+        MenuBarExtra("Peek", systemImage: "rectangle.dashed") {
+            MenuView(appState: appState)
+        }
+    }
+}
+
+// MARK: - Menu
+
+struct MenuView: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        Button(appState.isCapturing ? "Stop" : "Start") {
+            Task { @MainActor in await appState.toggle() }
+        }
+        .keyboardShortcut("s")
+
+        Divider()
+
+        if appState.availableDisplays.count > 1 {
+            Menu("Monitor") {
+                ForEach(appState.availableDisplays, id: \.displayID) { display in
+                    Button {
+                        Task { @MainActor in await appState.selectDisplay(display) }
+                    } label: {
+                        HStack {
+                            if appState.selectedDisplayID == display.displayID {
+                                Image(systemName: "checkmark")
+                            }
+                            Text(displayLabel(for: display))
+                        }
+                    }
+                }
+            }
+            Divider()
+        }
+
+        Menu("Region") {
+            ForEach(RegionPreset.allCases) { preset in
+                Button {
+                    Task { @MainActor in await appState.selectPreset(preset) }
+                } label: {
+                    HStack {
+                        if appState.selectedPreset == preset {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(preset.rawValue)
+                    }
+                }
+            }
+        }
+
+        Divider()
+
+        Button("Quit") {
+            Task { @MainActor in
+                await appState.stop()
+                NSApp.terminate(nil)
+            }
+        }
+        .keyboardShortcut("q")
+    }
+}
+
+// MARK: - App State
+
+@MainActor
+@Observable
+class AppState {
+    var selectedPreset: RegionPreset = .leftHalf
+    var selectedDisplayID: CGDirectDisplayID = CGMainDisplayID()
+    var isCapturing = false
+    var availableDisplays: [SCDisplay] = []
+
+    private let capture = ScreenCapture()
+    private let virtualDisplay = VirtualDisplayManager()
+    private let outputWindow = OutputWindow()
+
+    init() {
+        capture.onFrame = { [weak self] surface in
+            self?.outputWindow.updateFrame(surface)
+        }
+        Task { await refreshDisplays() }
+        observeScreenChanges()
+    }
+
+    // MARK: Actions
+
+    func toggle() async {
+        if isCapturing {
+            await stop()
+        } else {
+            await start()
+        }
+    }
+
+    func start() async {
+        await refreshDisplays()
+        guard let display = resolvedDisplay() else {
+            print("Peek: No display available")
+            return
+        }
+
+        let dw = display.width
+        let dh = display.height
+        let region = selectedPreset.regionSize(displayWidth: dw, displayHeight: dh)
+        let sourceRect = selectedPreset.sourceRect(displayWidth: dw, displayHeight: dh)
+
+        // Create virtual display
+        guard virtualDisplay.create(width: region.width, height: region.height) else {
+            print("Peek: Failed to create virtual display")
+            return
+        }
+
+        // Wait for NSScreen to appear
+        guard let screen = await virtualDisplay.waitForScreen() else {
+            print("Peek: Virtual display screen not found")
+            virtualDisplay.destroy()
+            return
+        }
+
+        // Show output window on virtual display
+        outputWindow.show(on: screen)
+
+        // Start capture
+        do {
+            try await capture.startCapture(
+                display: display,
+                sourceRect: sourceRect,
+                outputWidth: region.width,
+                outputHeight: region.height
+            )
+            isCapturing = true
+        } catch {
+            print("Peek: Capture failed: \(error)")
+            outputWindow.close()
+            virtualDisplay.destroy()
+        }
+    }
+
+    func stop() async {
+        await capture.stopCapture()
+        outputWindow.close()
+        virtualDisplay.destroy()
+        isCapturing = false
+    }
+
+    func selectPreset(_ preset: RegionPreset) async {
+        guard preset != selectedPreset else { return }
+        selectedPreset = preset
+        if isCapturing {
+            await applyConfiguration()
+        }
+    }
+
+    func selectDisplay(_ display: SCDisplay) async {
+        guard display.displayID != selectedDisplayID else { return }
+        selectedDisplayID = display.displayID
+        if isCapturing {
+            await applyConfiguration()
+        }
+    }
+
+    // MARK: - Configuration
+
+    private func applyConfiguration() async {
+        guard let display = resolvedDisplay() else { return }
+        let dw = display.width
+        let dh = display.height
+        let region = selectedPreset.regionSize(displayWidth: dw, displayHeight: dh)
+        let sourceRect = selectedPreset.sourceRect(displayWidth: dw, displayHeight: dh)
+
+        let needsResize = region.width != virtualDisplay.currentWidth
+            || region.height != virtualDisplay.currentHeight
+        let needsNewStream = display.displayID != capture.currentDisplayID
+
+        if needsResize {
+            await stop()
+            await start()
+            return
+        }
+
+        if needsNewStream {
+            do {
+                try await capture.startCapture(
+                    display: display,
+                    sourceRect: sourceRect,
+                    outputWidth: region.width,
+                    outputHeight: region.height
+                )
+            } catch {
+                print("Peek: Failed to switch display: \(error)")
+                await stop()
+            }
+            return
+        }
+
+        // Same display, same size — just update sourceRect
+        do {
+            try await capture.updateCapture(
+                sourceRect: sourceRect,
+                outputWidth: region.width,
+                outputHeight: region.height
+            )
+        } catch {
+            print("Peek: Failed to update capture: \(error)")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func resolvedDisplay() -> SCDisplay? {
+        availableDisplays.first { $0.displayID == selectedDisplayID }
+            ?? availableDisplays.first
+    }
+
+    func refreshDisplays() async {
+        await capture.refreshDisplays()
+        availableDisplays = capture.availableDisplays.filter {
+            $0.displayID != virtualDisplay.displayID
+        }
+        if !availableDisplays.contains(where: { $0.displayID == selectedDisplayID }) {
+            selectedDisplayID = CGMainDisplayID()
+        }
+    }
+
+    private nonisolated func observeScreenChanges() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.refreshDisplays()
+                if self.isCapturing && self.resolvedDisplay() == nil {
+                    await self.stop()
+                }
+            }
+        }
+    }
+}

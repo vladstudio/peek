@@ -83,25 +83,6 @@
     return YES;
 }
 
-- (BOOL)reconfigureWithWidth:(uint32_t)width height:(uint32_t)height {
-    if (!_display) return NO;
-
-    CGVirtualDisplayMode *mode =
-        [[CGVirtualDisplayMode alloc] initWithWidth:width
-                                             height:height
-                                        refreshRate:30.0];
-
-    CGVirtualDisplaySettings *settings = [[CGVirtualDisplaySettings alloc] init];
-    settings.modes = @[mode];
-    settings.hiDPI = 0;
-
-    if (![_display applySettings:settings]) {
-        NSLog(@"Peek: reconfigure failed, recreating display");
-        return [self createWithWidth:width height:height];
-    }
-    return YES;
-}
-
 - (void)destroy {
     if (_display) {
         NSLog(@"Peek: Destroying virtual display (ID=%u)", _display.displayID);

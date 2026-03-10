@@ -17,16 +17,6 @@ class VirtualDisplayManager {
         return true
     }
 
-    /// Try to reconfigure without destroying. Falls back to recreate.
-    func reconfigure(width: Int, height: Int) -> Bool {
-        guard bridge.reconfigure(withWidth: UInt32(width), height: UInt32(height)) else {
-            return false
-        }
-        currentWidth = width
-        currentHeight = height
-        return true
-    }
-
     func destroy() {
         bridge.destroy()
         currentWidth = 0

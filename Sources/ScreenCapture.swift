@@ -3,14 +3,18 @@ import CoreMedia
 import CoreVideo
 @preconcurrency import IOSurface
 
-@Observable
 final class ScreenCapture: NSObject, SCStreamOutput, @unchecked Sendable {
     var availableDisplays: [SCDisplay] = []
     private var stream: SCStream?
     private(set) var currentDisplayID: CGDirectDisplayID = 0
 
-    /// Called on main thread with each captured IOSurface.
-    var onFrame: ((IOSurface) -> Void)?
+    /// Called on main thread with each captured IOSurface. Set once at init, safe to read from any thread.
+    private let onFrame: @Sendable (IOSurface) -> Void
+
+    init(onFrame: @escaping @Sendable (IOSurface) -> Void) {
+        self.onFrame = onFrame
+        super.init()
+    }
 
     func refreshDisplays() async {
         do {
@@ -82,8 +86,8 @@ final class ScreenCapture: NSObject, SCStreamOutput, @unchecked Sendable {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         guard let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() else { return }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.onFrame?(surface)
+        DispatchQueue.main.async { [onFrame] in
+            onFrame(surface)
         }
     }
 }

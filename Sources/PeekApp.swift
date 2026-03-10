@@ -15,7 +15,8 @@ struct PeekApp: App {
 
     private static func menuBarIcon() -> NSImage {
         let img = Bundle.main.image(forResource: "menubar-icon")
-            ?? NSImage(systemSymbolName: "rectangle.dashed", accessibilityDescription: "Peek")!
+            ?? NSImage(systemSymbolName: "rectangle.dashed", accessibilityDescription: "Peek")
+            ?? NSImage(size: NSSize(width: 18, height: 18))
         img.isTemplate = true
         return img
     }
@@ -28,7 +29,7 @@ struct MenuView: View {
 
     var body: some View {
         Button(appState.isCapturing ? "Stop Sharing" : "Start Sharing") {
-            Task { @MainActor in await appState.toggle() }
+            Task { await appState.toggle() }
         }
         .keyboardShortcut("s")
         .onAppear { appState.showBorderIfActive() }
@@ -39,7 +40,7 @@ struct MenuView: View {
             Menu("Monitor") {
                 ForEach(appState.availableDisplays, id: \.displayID) { display in
                     Button {
-                        Task { @MainActor in await appState.selectDisplay(display) }
+                        Task { await appState.selectDisplay(display) }
                     } label: {
                         HStack {
                             if appState.selectedDisplayID == display.displayID {
@@ -56,7 +57,7 @@ struct MenuView: View {
         Menu("Region") {
             ForEach(RegionPreset.allCases) { preset in
                 Button {
-                    Task { @MainActor in await appState.selectPreset(preset) }
+                    Task { await appState.selectPreset(preset) }
                 } label: {
                     HStack {
                         if appState.selectedPreset == preset {
@@ -71,7 +72,7 @@ struct MenuView: View {
         Divider()
 
         Button("Quit") {
-            Task { @MainActor in
+            Task {
                 await appState.stop()
                 NSApp.terminate(nil)
             }
@@ -90,15 +91,14 @@ class AppState {
     var isCapturing = false
     var availableDisplays: [SCDisplay] = []
 
-    private let capture = ScreenCapture()
+    private let capture: ScreenCapture
     private let virtualDisplay = VirtualDisplayManager()
     private let outputWindow = OutputWindow()
     private let regionBorder = RegionBorder()
 
     init() {
-        capture.onFrame = { [weak self] surface in
-            self?.outputWindow.updateFrame(surface)
-        }
+        let ow = outputWindow
+        capture = ScreenCapture { surface in ow.updateFrame(surface) }
         Task { await start() }
         observeScreenChanges()
     }

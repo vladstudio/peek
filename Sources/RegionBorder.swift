@@ -36,8 +36,6 @@ class RegionBorder {
 
             let view = NSView(frame: NSRect(origin: .zero, size: screenFrame.size))
             view.wantsLayer = true
-            view.layer?.backgroundColor = .clear
-
             let layer = CAShapeLayer()
             layer.fillRule = .evenOdd
             view.layer?.addSublayer(layer)
@@ -68,18 +66,6 @@ class RegionBorder {
         }
         flashWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
-    }
-
-    /// Brief pulse: bump opacity up then back down (for when overlay is already visible).
-    func pulse() {
-        guard let layer = shapeLayer else { return }
-        let anim = CABasicAnimation(keyPath: "opacity")
-        anim.fromValue = 1.0
-        anim.toValue = 0.3
-        anim.duration = 0.15
-        anim.autoreverses = true
-        anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        layer.add(anim, forKey: "pulse")
     }
 
     func close() {

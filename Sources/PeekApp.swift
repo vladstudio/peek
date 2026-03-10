@@ -6,9 +6,18 @@ struct PeekApp: App {
     @State private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("Peek", systemImage: "rectangle.dashed") {
+        MenuBarExtra {
             MenuView(appState: appState)
+        } label: {
+            Image(nsImage: Self.menuBarIcon())
         }
+    }
+
+    private static func menuBarIcon() -> NSImage {
+        let img = Bundle.main.image(forResource: "menubar-icon")
+            ?? NSImage(systemSymbolName: "rectangle.dashed", accessibilityDescription: "Peek")!
+        img.isTemplate = true
+        return img
     }
 }
 
@@ -18,10 +27,11 @@ struct MenuView: View {
     @Bindable var appState: AppState
 
     var body: some View {
-        Button(appState.isCapturing ? "Stop" : "Start") {
+        Button(appState.isCapturing ? "Stop Sharing" : "Start Sharing") {
             Task { @MainActor in await appState.toggle() }
         }
         .keyboardShortcut("s")
+        .onAppear { appState.flashBorder() }
 
         Divider()
 
@@ -83,6 +93,7 @@ class AppState {
     private let capture = ScreenCapture()
     private let virtualDisplay = VirtualDisplayManager()
     private let outputWindow = OutputWindow()
+    private let regionBorder = RegionBorder()
 
     init() {
         capture.onFrame = { [weak self] surface in
@@ -156,6 +167,7 @@ class AppState {
     func selectPreset(_ preset: RegionPreset) async {
         guard preset != selectedPreset else { return }
         selectedPreset = preset
+        flashBorder()
         if isCapturing {
             await applyConfiguration()
         }
@@ -217,12 +229,29 @@ class AppState {
 
     // MARK: - Helpers
 
+    func flashBorder() {
+        guard let display = resolvedDisplay(),
+              let screen = nsScreen(for: display) else { return }
+        let sourceRect = selectedPreset.sourceRect(
+            displayWidth: display.width, displayHeight: display.height
+        )
+        // Convert sourceRect (top-left origin) to screen coords (bottom-left origin)
+        let screenFrame = screen.frame
+        let flipped = CGRect(
+            x: screenFrame.origin.x + sourceRect.origin.x,
+            y: screenFrame.origin.y + screenFrame.height - sourceRect.origin.y - sourceRect.height,
+            width: sourceRect.width,
+            height: sourceRect.height
+        )
+        regionBorder.flash(rect: flipped, on: screen)
+    }
+
     private func resolvedDisplay() -> SCDisplay? {
         availableDisplays.first { $0.displayID == selectedDisplayID }
             ?? availableDisplays.first
     }
 
-    func refreshDisplays() async {
+    private func refreshDisplays() async {
         await capture.refreshDisplays()
         availableDisplays = capture.availableDisplays.filter {
             $0.displayID != virtualDisplay.displayID

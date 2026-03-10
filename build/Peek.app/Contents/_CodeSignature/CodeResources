@@ -12,6 +12,14 @@
 		<data>
 		zMs9HWoKU/QzQbdwp/DKpZDd094=
 		</data>
+		<key>Resources/menubar-icon.png</key>
+		<data>
+		d/hHlzLGKjYNExhPGYy/f5qzqKY=
+		</data>
+		<key>Resources/menubar-icon@2x.png</key>
+		<data>
+		OgWiYwRpQld4J5uF6jaQYecFyoU=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -27,6 +35,20 @@
 			<key>hash2</key>
 			<data>
 			/CV+me83qA5Gu+Hj2t8g/mhiHTeQ6kZNXc2+hnT3TA0=
+			</data>
+		</dict>
+		<key>Resources/menubar-icon.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			N30ifewj/1qoGbJAOxI0LUl8uit3ONAojdJIqEzMkOY=
+			</data>
+		</dict>
+		<key>Resources/menubar-icon@2x.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			0IHXpodPol56SEuUEJcVh991ddEPEmIUbWyjflsIcQE=
 			</data>
 		</dict>
 	</dict>

@@ -35,14 +35,7 @@ final class ScreenCapture: NSObject, SCStreamOutput, @unchecked Sendable {
 
         let filter = SCContentFilter(display: display, excludingWindows: [])
 
-        let config = SCStreamConfiguration()
-        config.sourceRect = sourceRect
-        config.width = outputWidth
-        config.height = outputHeight
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = false
-        config.showsCursor = false
+        let config = Self.makeConfig(sourceRect: sourceRect, outputWidth: outputWidth, outputHeight: outputHeight)
 
         let newStream = SCStream(filter: filter, configuration: config, delegate: nil)
         try newStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .global(qos: .userInteractive))
@@ -54,6 +47,11 @@ final class ScreenCapture: NSObject, SCStreamOutput, @unchecked Sendable {
 
     func updateCapture(sourceRect: CGRect, outputWidth: Int, outputHeight: Int) async throws {
         guard let stream else { return }
+        let config = Self.makeConfig(sourceRect: sourceRect, outputWidth: outputWidth, outputHeight: outputHeight)
+        try await stream.updateConfiguration(config)
+    }
+
+    private static func makeConfig(sourceRect: CGRect, outputWidth: Int, outputHeight: Int) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
         config.sourceRect = sourceRect
         config.width = outputWidth
@@ -62,7 +60,7 @@ final class ScreenCapture: NSObject, SCStreamOutput, @unchecked Sendable {
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.capturesAudio = false
         config.showsCursor = false
-        try await stream.updateConfiguration(config)
+        return config
     }
 
     func stopCapture() async {

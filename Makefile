@@ -45,6 +45,8 @@ $(APP_BUNDLE): $(BINARY) Info.plist Peek.entitlements icon.png
 	@cp $(BINARY) $(APP_BUNDLE)/Contents/MacOS/
 	@cp Info.plist $(APP_BUNDLE)/Contents/
 	@cp icon.png $(APP_BUNDLE)/Contents/Resources/AppIcon.png
+	@cp menubar-icon.png $(APP_BUNDLE)/Contents/Resources/
+	@cp menubar-icon@2x.png $(APP_BUNDLE)/Contents/Resources/
 	# Convert PNG to icns for app icon
 	@mkdir -p $(BUILD_DIR)/AppIcon.iconset
 	@sips -z 1024 1024 icon.png --out $(BUILD_DIR)/AppIcon.iconset/icon_512x512@2x.png >/dev/null 2>&1

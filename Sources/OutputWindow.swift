@@ -25,9 +25,6 @@ class OutputWindow {
         w.hasShadow = false
         w.title = "Peek"
 
-        // Use frame covering entire screen including menubar
-        w.setFrame(screen.frame, display: true)
-
         let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
         view.wantsLayer = true
 

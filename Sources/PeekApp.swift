@@ -99,7 +99,7 @@ class AppState {
         capture.onFrame = { [weak self] surface in
             self?.outputWindow.updateFrame(surface)
         }
-        Task { await refreshDisplays() }
+        Task { await start() }
         observeScreenChanges()
     }
 
